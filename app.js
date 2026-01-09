@@ -1,389 +1,127 @@
-// app.js - vollständiges Frontend-Skript (korrigiert: Suche baut Tabelle aus API-Antwort keys)
-// Erwartet: API_URL und ROOMS in config.js
-
-let session = {
-  token: localStorage.getItem('er_token') || null,
-  user: localStorage.getItem('er_user') || null,
-  role: localStorage.getItem('er_role') || null
-};
-
-document.addEventListener('DOMContentLoaded', init);
-
-function init(){
-  // Populate room dropdowns
-  const selEntry = document.getElementById('roomSelectEntry');
-  const selBoard = document.getElementById('roomSelectBoard');
-  ROOMS.forEach(r=>{
-    const o1 = document.createElement('option'); o1.value = r; o1.textContent = r; selEntry.appendChild(o1);
-    const o2 = document.createElement('option'); o2.value = r; o2.textContent = r; selBoard.appendChild(o2);
-  });
-
-  // Events
-  document.getElementById('loginBtn').addEventListener('click', doLogin);
-  document.getElementById('logoutBtn').addEventListener('click', doLogout);
-  document.getElementById('submitEntryBtn').addEventListener('click', submitEntry);
-  document.getElementById('refreshBoardBtn').addEventListener('click', () => loadLeaderboard(document.getElementById('roomSelectBoard').value));
-  document.getElementById('generateImageBtn').addEventListener('click', generateAdminImage);
-  document.querySelectorAll('.tabBtn').forEach(b=>b.addEventListener('click', onTabClick));
-  const searchBtn = document.getElementById('searchBtn');
-  if(searchBtn) searchBtn.addEventListener('click', doSearch);
-  const searchInput = document.getElementById('searchGroupInput');
-  if(searchInput) searchInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doSearch(); });
-
-  // Initial UI
-  if(session.token){
-    showMainForSession();
-  } else {
-    document.getElementById('loginArea').style.display='block';
-  }
-}
-
-function onTabClick(e){
-  document.querySelectorAll('.tabBtn').forEach(b=>b.classList.remove('active'));
-  e.currentTarget.classList.add('active');
-  const tab = e.currentTarget.dataset.tab;
-  document.querySelectorAll('.tabContent').forEach(t=>t.style.display='none');
-  const el = document.getElementById(tab);
-  if(el) el.style.display='block';
-
-  // Load content when switching
-  if(tab === 'leaderboard'){
-    loadLeaderboard(document.getElementById('roomSelectBoard').value);
-  } else if(tab === 'uebersicht'){
-    loadOverview();
-  } else if(tab === 'suche'){
-    document.getElementById('searchMessage').textContent = '';
-    document.getElementById('searchResultsWrap').innerHTML = '';
-  }
-}
-
-// ----------------- Auth -----------------
-async function doLogin(){
-  const user = document.getElementById('loginUser').value.trim();
-  const pass = document.getElementById('loginPass').value;
-  if(!user || !pass){ setMessage('loginMessage','Bitte Benutzername und Passwort eingeben'); return; }
-  try{
-    const res = await apiPost({action:'login', username:user, password:pass});
-    if(res && res.ok && res.role){
-      session.token = res.token;
-      session.user = user;
-      session.role = res.role;
-      localStorage.setItem('er_token', res.token);
-      localStorage.setItem('er_user', user);
-      localStorage.setItem('er_role', res.role);
-      showMainForSession();
-    } else {
-      setMessage('loginMessage', (res && res.message) ? res.message : 'Login fehlgeschlagen');
-    }
-  }catch(err){
-    console.error('doLogin error', err); setMessage('loginMessage','Fehler beim Login');
-  }
-}
-
-function doLogout(){
-  session.token = null; session.user = null; session.role = null;
-  localStorage.removeItem('er_token'); localStorage.removeItem('er_user'); localStorage.removeItem('er_role');
-  document.getElementById('mainContent').style.display='none';
-  document.getElementById('loginArea').style.display='block';
-  document.getElementById('welcomeText').textContent='';
-  document.getElementById('logoutBtn').style.display='none';
-}
-
-function showMainForSession(){
-  document.getElementById('loginArea').style.display='none';
-  document.getElementById('mainContent').style.display='block';
-  document.getElementById('welcomeText').textContent = `Eingeloggt als ${session.user} (${session.role})`;
-  document.getElementById('logoutBtn').style.display='inline-block';
-  // Admin tab visibility
-  if(session.role === 'admin'){
-    document.getElementById('adminTabBtn').style.display='inline-block';
-  } else {
-    document.getElementById('adminTabBtn').style.display='none';
-  }
-  // Show default tab Eintragung
-  document.querySelectorAll('.tabBtn').forEach(b=>b.classList.remove('active'));
-  const defaultBtn = document.querySelector('.tabBtn[data-tab="eintragung"]');
-  if(defaultBtn) defaultBtn.classList.add('active');
-  document.querySelectorAll('.tabContent').forEach(t=>t.style.display='none');
-  document.getElementById('eintragung').style.display='block';
-}
-
-// ----------------- Eintragung -----------------
-async function submitEntry(){
-  const group = document.getElementById('groupName').value.trim();
-  const room = document.getElementById('roomSelectEntry').value;
-  const min = parseInt(document.getElementById('timeMin').value,10) || 0;
-  const sec = parseInt(document.getElementById('timeSec').value,10) || 0;
-  if(!group){ setMessage('entryMessage','Bitte Gruppennamen eingeben'); return; }
-  if(sec < 0 || sec > 59){ setMessage('entryMessage','Sekunden müssen zwischen 0 und 59 liegen'); return; }
-  const totalSec = min*60 + sec;
-  try{
-    const payload = {
-      action: 'addEntry',
-      token: session.token,
-      groupName: group,
-      room: room,
-      timeSeconds: totalSec
-    };
-    const res = await apiPost(payload);
-    if(res && res.ok){
-      setMessage('entryMessage','Eintrag gespeichert', true);
-      document.getElementById('groupName').value='';
-      document.getElementById('timeMin').value='0';
-      document.getElementById('timeSec').value='0';
-    } else {
-      setMessage('entryMessage', (res && res.message) ? res.message : 'Fehler beim Speichern');
-    }
-  }catch(err){
-    console.error('submitEntry error', err); setMessage('entryMessage','Fehler beim Senden');
-  }
-}
-
-// ----------------- Leaderboard / Übersicht -----------------
-async function loadLeaderboard(room){
-  const wrap = document.getElementById('boardTableWrap');
-  wrap.innerHTML = 'Lade...';
-  try{
-    const res = await apiGet(`action=getLeaderboard&room=${encodeURIComponent(room)}`);
-    if(res && res.ok){
-      const rows = res.data || [];
-      wrap.innerHTML = renderLeaderboardTable(rows, room);
-    } else {
-      wrap.innerHTML = `<div class="message">Fehler: ${(res && res.message) ? res.message : 'k.A.'}</div>`;
-    }
-  }catch(err){
-    console.error('loadLeaderboard error', err); wrap.innerHTML = '<div class="message">Fehler beim Laden</div>';
-  }
-}
-
-function renderLeaderboardTable(rows, room){
-  if(!rows || !rows.length) return `<div class="message">Keine Einträge für "${escapeHtml(room)}".</div>`;
-  let html = `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
-  rows.sort((a,b)=>a.timeSeconds - b.timeSeconds);
-  rows.forEach((r,i)=>{
-    html += `<tr><td>${i+1}</td><td>${escapeHtml(r.groupName)}</td><td>${formatTime(r.timeSeconds)}</td></tr>`;
-  });
-  html += `</tbody></table>`;
-  return html;
-}
-
-async function loadOverview(){
-  const wrap = document.getElementById('overviewWrap');
-  wrap.innerHTML = 'Lade...';
-  try{
-    const res = await apiGet(`action=getOverview`);
-    if(res && res.ok){
-      const data = res.data || {};
-      wrap.innerHTML = '';
-      ROOMS.forEach(room=>{
-        const arr = (data[room] || []).slice(0,10);
-        const block = document.createElement('div');
-        block.className = 'roomBlock';
-        block.innerHTML = `<h3>${escapeHtml(room)}</h3>` + renderTinyTable(arr);
-        wrap.appendChild(block);
-      });
-    } else {
-      wrap.innerHTML = `<div class="message">Fehler: ${(res && res.message) ? res.message : 'k.A.'}</div>`;
-    }
-  }catch(err){
-    console.error('loadOverview error', err); wrap.innerHTML = '<div class="message">Fehler beim Laden</div>';
-  }
-}
-
-function renderTinyTable(rows){
-  if(!rows || !rows.length) return '<div class="message">Keine Einträge</div>';
-  let html = `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
-  rows.forEach((r,i)=>{
-    html += `<tr><td>${i+1}</td><td>${escapeHtml(r.groupName)}</td><td>${formatTime(r.timeSeconds)}</td></tr>`;
-  });
-  html += '</tbody></table>';
-  return html;
-}
-
-// ----------------- Suche (partial/exact) -----------------
-async function doSearch(){
-  const q = document.getElementById('searchGroupInput').value.trim();
-  const wrap = document.getElementById('searchResultsWrap');
-  const msg = document.getElementById('searchMessage');
-  wrap.innerHTML = '';
-  msg.textContent = '';
-  if(!q){ msg.textContent = 'Bitte Gruppenname eingeben'; return; }
-  msg.textContent = 'Suche...';
-  const partial = document.getElementById('searchPartial') && document.getElementById('searchPartial').checked ? 'true' : 'false';
-  try{
-    const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}&partial=${partial}&n=200`);
-    if(res && res.ok){
-      const data = res.data || {};
-      // If API returned an object mapping rooms->matches, iterate over its keys
-      const keys = Object.keys(data || {});
-      // flatten results into single array using the API's keys (not only ROOMS)
-      const flat = [];
-      keys.forEach(room =>{
-        const arr = data[room] || [];
-        arr.forEach(item=>{
-          flat.push({
-            room: room,
-            rank: item.rank,
-            groupName: item.groupName,
-            timeSeconds: Number(item.timeSeconds || 0)
-          });
-        });
-      });
-
-      if(!flat.length){
-        // If API returned something unexpected, show raw JSON for debugging
-        if(keys.length === 0){
-          wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
-        } else {
-          wrap.innerHTML = `<div class="message">Keine Treffer gefunden (leere Treffer-Arrays). Rohantwort:</div><pre style="white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;margin-top:8px;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
-        }
-      } else {
-        // sort by room then rank
-        flat.sort((a,b)=>{
-          if(a.room < b.room) return -1;
-          if(a.room > b.room) return 1;
-          return a.rank - b.rank;
-        });
-        wrap.innerHTML = renderSearchResultsTable(flat);
-      }
-      msg.textContent = '';
-    } else {
-      msg.textContent = (res && res.message) ? res.message : 'Fehler bei der Suche';
-      // show raw if available
-      if(res && res.raw) {
-        wrap.innerHTML = `<pre style="white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;margin-top:8px;">${escapeHtml(res.raw)}</pre>`;
-      }
-    }
-  }catch(err){
-    console.error('doSearch error', err);
-    msg.textContent = 'Fehler bei der Suche';
-    wrap.innerHTML = `<pre style="white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;margin-top:8px;">${escapeHtml(String(err))}</pre>`;
-  }
-}
-
-// Renders a single combined table for all matches
-function renderSearchResultsTable(rows){
-  let html = `<table><thead><tr><th>Raum</th><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
-  rows.forEach(r=>{
-    html += `<tr><td>${escapeHtml(r.room)}</td><td>${r.rank}</td><td>${escapeHtml(r.groupName)}</td><td>${formatTime(r.timeSeconds)}</td></tr>`;
-  });
-  html += `</tbody></table>`;
-  return html;
-}
-
-// ----------------- Admin: Export JPEG -----------------
+// Ersetze die bestehende generateAdminImage-Funktion in app.js durch diese Version (ohne Avatar)
 async function generateAdminImage(){
   if(session.role !== 'admin'){ alert('Nur Admins dürfen das ausführen'); return; }
   const exportArea = document.getElementById('exportArea');
   exportArea.style.display = 'block';
-  exportArea.innerHTML = '';
+  exportArea.innerHTML = ''; // clear
+
   try{
-    const needed = [
+    const rooms = [
       "The Saw Massacre","Nightmare Hotel",
-      "Der Heilige Gral",
-      "Der Erbe Draculas","666 Passagiere"
+      "Der Heilige Gral","Der Erbe Draculas","666 Passagiere"
     ];
-    const promises = needed.map(r=>apiGet(`action=getTopN&room=${encodeURIComponent(r)}&n=5`));
+
+    // hole Top-5 pro Raum
+    const promises = rooms.map(r=>apiGet(`action=getTopN&room=${encodeURIComponent(r)}&n=5`));
     const results = await Promise.all(promises);
-    const data = {};
-    for(let i=0;i<needed.length;i++){
-      const r = needed[i];
-      if(results[i] && results[i].ok) data[r] = results[i].data || [];
-      else data[r] = [];
+    const dataMap = {};
+    for(let i=0;i<rooms.length;i++){
+      const r = rooms[i];
+      dataMap[r] = (results[i] && results[i].ok) ? results[i].data || [] : [];
     }
 
-    function makeBlockHTML(roomName, arr){
-      let html = `<div class="exportBlock"><h4>${escapeHtml(roomName)}</h4>`;
-      html += `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+    // export container
+    const container = document.createElement('div');
+    container.className = 'exportCanvas';
+
+    // helper: medal SVGs
+    function medalSVG(type){
+      let fill = '#ffd14d'; // gold
+      let ribbon1 = '#e74c3c', ribbon2 = '#c0392b';
+      if(type === 'silver'){ fill = '#dfe6ee'; ribbon1 = '#9aa6b8'; ribbon2 = '#6f7c8b'; }
+      if(type === 'bronze'){ fill = '#d9a17a'; ribbon1 = '#b76b3a'; ribbon2 = '#7f4523'; }
+      const svg = `
+        <svg width="46" height="46" viewBox="0 0 46 46" xmlns="http://www.w3.org/2000/svg" role="img">
+          <rect x="9" y="0" width="8" height="16" fill="${ribbon1}" transform="rotate(-20 13 8)"></rect>
+          <rect x="29" y="0" width="8" height="16" fill="${ribbon2}" transform="rotate(20 33 8)"></rect>
+          <circle cx="23" cy="26" r="14" fill="${fill}" stroke="rgba(0,0,0,0.15)" stroke-width="1"/>
+          <circle cx="19" cy="22" r="5.5" fill="rgba(255,255,255,0.18)"/>
+        </svg>
+      `;
+      return svg;
+    }
+
+    // Für jeden Raum eine stilisierte Board-Karte (ohne Avatar)
+    rooms.forEach(roomName=>{
+      const arr = dataMap[roomName] || [];
+      const board = document.createElement('div');
+      board.className = 'exportBoard';
+
+      // optional glow decor
+      const glow = document.createElement('div'); glow.className = 'glow';
+      board.appendChild(glow);
+
+      // header
+      const header = document.createElement('div'); header.className = 'boardHeader';
+      const title = document.createElement('div'); title.className = 'boardTitle';
+      title.textContent = roomName.toUpperCase();
+      header.appendChild(title);
+      board.appendChild(header);
+
+      // rows container
+      const rowsWrap = document.createElement('div'); rowsWrap.className = 'rows';
+
+      // ensure at least 5 rows for visual consistency
       for(let i=0;i<5;i++){
-        const row = arr[i];
-        if(row) html += `<tr><td>${i+1}</td><td>${escapeHtml(row.groupName)}</td><td>${formatTime(row.timeSeconds)}</td></tr>`;
-        else html += `<tr><td>${i+1}</td><td>-</td><td>-</td></tr>`;
+        const rowData = arr[i] || null;
+        const row = document.createElement('div'); row.className = 'row';
+
+        // medal/rank circle (left)
+        const medal = document.createElement('div');
+        medal.className = 'medal';
+        if(i === 0) {
+          medal.classList.add('gold');
+          medal.innerHTML = medalSVG('gold');
+        } else if(i === 1) {
+          medal.classList.add('silver');
+          medal.innerHTML = medalSVG('silver');
+        } else if(i === 2) {
+          medal.classList.add('bronze');
+          medal.innerHTML = medalSVG('bronze');
+        } else {
+          medal.classList.add('rankNum');
+          medal.textContent = (i+1).toString();
+        }
+        row.appendChild(medal);
+
+        // name block (wider since no avatar)
+        const nameBlock = document.createElement('div'); nameBlock.className = 'nameBlock';
+        const namePill = document.createElement('div'); namePill.className = 'namePill';
+        namePill.style.minWidth = '420px'; // etwas breiter ohne Avatar
+
+        const nameText = document.createElement('div');
+        nameText.textContent = rowData && rowData.groupName ? rowData.groupName : '-';
+        namePill.appendChild(nameText);
+        nameBlock.appendChild(namePill);
+
+        // score badge (use timeDisplay if present, else timeSeconds formatted)
+        const scoreBadge = document.createElement('div'); scoreBadge.className = 'scoreBadge';
+        const timeText = (rowData && rowData.timeDisplay) ? rowData.timeDisplay : (rowData && rowData.timeSeconds ? formatTime(Number(rowData.timeSeconds)) : '-');
+        scoreBadge.textContent = timeText;
+        nameBlock.appendChild(scoreBadge);
+
+        row.appendChild(nameBlock);
+        rowsWrap.appendChild(row);
       }
-      html += `</tbody></table></div>`;
-      return html;
-    }
 
-    const row1 = document.createElement('div'); row1.style.display='flex'; row1.style.gap='12px';
-    row1.innerHTML = makeBlockHTML("The Saw Massacre", data["The Saw Massacre"]) + makeBlockHTML("Nightmare Hotel", data["Nightmare Hotel"]);
-    exportArea.appendChild(row1);
+      board.appendChild(rowsWrap);
+      container.appendChild(board);
+    });
 
-    const row2 = document.createElement('div'); row2.style.marginTop='12px';
-    row2.innerHTML = makeBlockHTML("Der Heilige Gral", data["Der Heilige Gral"]);
-    exportArea.appendChild(row2);
+    exportArea.appendChild(container);
 
-    const row3 = document.createElement('div'); row3.style.display='flex'; row3.style.gap='12px'; row3.style.marginTop='12px';
-    row3.innerHTML = makeBlockHTML("Der Erbe Draculas", data["Der Erbe Draculas"]) + makeBlockHTML("666 Passagiere", data["666 Passagiere"]);
-    exportArea.appendChild(row3);
-
-    const style = document.createElement('style');
-    style.innerHTML = `.exportBlock{background:#fff;padding:8px;border-radius:6px;width:100%} .exportBlock table{width:100%;border-collapse:collapse} .exportBlock th,.exportBlock td{border:1px solid #ccc;padding:4px}`;
-    exportArea.appendChild(style);
-
-    const canvas = await html2canvas(exportArea, {scale:2, backgroundColor:'#f6f8fb'});
+    // render with html2canvas (scale=2 for higher DPI). use backgroundColor:null to keep gradient
+    const canvas = await html2canvas(container, {scale:2, backgroundColor: null});
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
     const a = document.createElement('a');
     a.href = dataUrl;
-    a.download = 'uebersicht_leaderboard.jpg';
-    a.textContent = 'JPEG herunterladen';
-    a.style.display='inline-block';
-    a.style.marginTop='10px';
-    exportArea.appendChild(a);
+    a.download = 'leaderboard_overview.jpg';
+    a.style.display='none';
+    document.body.appendChild(a);
     a.click();
+    a.remove();
   }catch(err){
     console.error('generateAdminImage error', err);
-    alert('Fehler beim Erzeugen des Bildes');
-  }
-}
-
-// ----------------- Helpers -----------------
-function formatTime(totalSec){
-  const m = Math.floor(totalSec/60);
-  const s = totalSec % 60;
-  return `${m}m ${String(s).padStart(2,'0')}s`;
-}
-
-function escapeHtml(s){
-  if(!s) return '';
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function setMessage(id, text, ok=false){
-  const el = document.getElementById(id);
-  if(!el) return;
-  el.textContent = text;
-  el.style.color = ok ? 'green' : '';
-  setTimeout(()=>{ if(el && el.textContent === text) el.textContent = ''; }, 5000);
-}
-
-// ----------------- API helpers -----------------
-// GET helper
-async function apiGet(query){
-  const url = `${API_URL}?${query}`;
-  const resp = await fetch(url, {method:'GET', headers:{'Accept':'application/json'}});
-  const text = await resp.text();
-  try{
-    return JSON.parse(text);
-  }catch(e){
-    return { ok: false, message: 'Ungültige Serverantwort', raw: text };
-  }
-}
-
-// POST helper (CORS-safe: send URLSearchParams, no custom headers)
-async function apiPost(obj){
-  const params = new URLSearchParams();
-  for(const k in obj){
-    if(obj[k] === undefined || obj[k] === null) continue;
-    params.append(k, String(obj[k]));
-  }
-  const resp = await fetch(API_URL, {
-    method: 'POST',
-    body: params // Browser sets Content-Type automatically
-  });
-  const text = await resp.text();
-  try{
-    return JSON.parse(text);
-  }catch(e){
-    return { ok: false, message: 'Ungültige Serverantwort', raw: text };
+    alert('Fehler beim Erzeugen des Bildes: ' + String(err));
   }
 }
