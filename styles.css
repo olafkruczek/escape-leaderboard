@@ -39,12 +39,54 @@ input, select{display:block;padding:8px;margin-top:4px;width:100%;max-width:360p
 .timeRow{display:flex;gap:8px;align-items:center}
 .timeRow input{width:120px}
 .message{margin-top:8px;color:var(--muted)}
-#boardTableWrap table, #overviewWrap table {border-collapse:collapse;width:100%;max-width:720px}
-#boardTableWrap th, #boardTableWrap td, #overviewWrap th, #overviewWrap td{
-  border:1px solid #ddd;padding:6px;text-align:left
+
+/* --- Tabellen Styling (einheitlich für Leaderboard, Übersicht, Suche, Export) --- */
+#boardTableWrap table,
+#overviewWrap table,
+#searchResultsWrap table,
+.roomBlock table,
+.exportBlock table {
+  border-collapse:collapse;
+  width:100%;
+  max-width:720px;
+  background:#fff;
+  border-radius:6px;
+  overflow:hidden;
+  box-shadow:0 1px 3px rgba(0,0,0,0.04);
 }
+
+/* Zellen */
+#boardTableWrap th, #boardTableWrap td,
+#overviewWrap th, #overviewWrap td,
+#searchResultsWrap th, #searchResultsWrap td,
+.roomBlock th, .roomBlock td,
+.exportBlock th, .exportBlock td {
+  border:1px solid #e1e6ef;
+  padding:8px 10px;
+  text-align:left;
+  vertical-align:middle;
+  font-size:14px;
+}
+
+/* Header-Stil */
+#boardTableWrap thead th,
+#overviewWrap thead th,
+#searchResultsWrap thead th,
+.roomBlock thead th,
+.exportBlock thead th {
+  background: linear-gradient(180deg,#f3f7ff,#ffffff);
+  color:#222;
+  font-weight:600;
+}
+
+/* responsive: room blocks side-by-side on larger screens */
 #overviewWrap .roomBlock{display:inline-block;vertical-align:top;margin:8px;padding:8px;background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
-footer{margin-top:24px;color:var(--muted)}
 @media(min-width:900px){
   #overviewWrap .roomBlock{width:45%}
 }
+
+/* Export blocks */
+.exportBlock{background:#fff;padding:8px;border-radius:6px;width:100%}
+
+/* small table message */
+footer{margin-top:24px;color:var(--muted)}
