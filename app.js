@@ -1,4 +1,4 @@
-// app.js - vollständiges Frontend-Skript (Suchergebnisse als kombinierte Tabelle)
+// app.js - vollständiges Frontend-Skript (korrigiert: Suche baut Tabelle aus API-Antwort keys)
 // Erwartet: API_URL und ROOMS in config.js
 
 let session = {
@@ -214,9 +214,11 @@ async function doSearch(){
     const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}&partial=${partial}&n=200`);
     if(res && res.ok){
       const data = res.data || {};
-      // flatten results into single array
+      // If API returned an object mapping rooms->matches, iterate over its keys
+      const keys = Object.keys(data || {});
+      // flatten results into single array using the API's keys (not only ROOMS)
       const flat = [];
-      ROOMS.forEach(room=>{
+      keys.forEach(room =>{
         const arr = data[room] || [];
         arr.forEach(item=>{
           flat.push({
@@ -227,8 +229,14 @@ async function doSearch(){
           });
         });
       });
+
       if(!flat.length){
-        wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
+        // If API returned something unexpected, show raw JSON for debugging
+        if(keys.length === 0){
+          wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
+        } else {
+          wrap.innerHTML = `<div class="message">Keine Treffer gefunden (leere Treffer-Arrays). Rohantwort:</div><pre style="white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;margin-top:8px;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+        }
       } else {
         // sort by room then rank
         flat.sort((a,b)=>{
@@ -241,10 +249,15 @@ async function doSearch(){
       msg.textContent = '';
     } else {
       msg.textContent = (res && res.message) ? res.message : 'Fehler bei der Suche';
+      // show raw if available
+      if(res && res.raw) {
+        wrap.innerHTML = `<pre style="white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;margin-top:8px;">${escapeHtml(res.raw)}</pre>`;
+      }
     }
   }catch(err){
     console.error('doSearch error', err);
     msg.textContent = 'Fehler bei der Suche';
+    wrap.innerHTML = `<pre style="white-space:pre-wrap;background:#fff;padding:8px;border-radius:6px;margin-top:8px;">${escapeHtml(String(err))}</pre>`;
   }
 }
 
