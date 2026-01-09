@@ -1,5 +1,5 @@
-// app.js - vollständiges Frontend-Skript (aktualisiert: apiPost vermeidet CORS-Preflight)
-// Erwartet: API_URL und ROOMS aus config.js
+// app.js - vollständiges Frontend-Skript (inkl. neuer Suche-Logik)
+// Erwartet: API_URL und ROOMS in config.js
 
 let session = {
   token: localStorage.getItem('er_token') || null,
@@ -10,7 +10,6 @@ let session = {
 document.addEventListener('DOMContentLoaded', init);
 
 function init(){
-  // populate room dropdowns
   const selEntry = document.getElementById('roomSelectEntry');
   const selBoard = document.getElementById('roomSelectBoard');
   ROOMS.forEach(r=>{
@@ -18,15 +17,15 @@ function init(){
     const o2 = document.createElement('option'); o2.value = r; o2.textContent = r; selBoard.appendChild(o2);
   });
 
-  // events
   document.getElementById('loginBtn').addEventListener('click', doLogin);
   document.getElementById('logoutBtn').addEventListener('click', doLogout);
   document.getElementById('submitEntryBtn').addEventListener('click', submitEntry);
   document.getElementById('refreshBoardBtn').addEventListener('click', () => loadLeaderboard(document.getElementById('roomSelectBoard').value));
   document.getElementById('generateImageBtn').addEventListener('click', generateAdminImage);
   document.querySelectorAll('.tabBtn').forEach(b=>b.addEventListener('click', onTabClick));
+  document.getElementById('searchBtn').addEventListener('click', doSearch);
+  document.getElementById('searchGroupInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doSearch(); });
 
-  // initial UI
   if(session.token){
     showMainForSession();
   } else {
@@ -41,11 +40,14 @@ function onTabClick(e){
   document.querySelectorAll('.tabContent').forEach(t=>t.style.display='none');
   document.getElementById(tab).style.display='block';
 
-  // load content when switching
   if(tab==='leaderboard'){
     loadLeaderboard(document.getElementById('roomSelectBoard').value);
   } else if(tab==='uebersicht'){
     loadOverview();
+  } else if(tab==='suche'){
+    // clear previous
+    document.getElementById('searchMessage').textContent='';
+    document.getElementById('searchResultsWrap').innerHTML='';
   }
 }
 
@@ -85,13 +87,11 @@ function showMainForSession(){
   document.getElementById('mainContent').style.display='block';
   document.getElementById('welcomeText').textContent = `Eingeloggt als ${session.user} (${session.role})`;
   document.getElementById('logoutBtn').style.display='inline-block';
-  // admin tab visibility
   if(session.role==='admin'){
     document.getElementById('adminTabBtn').style.display='inline-block';
   } else {
     document.getElementById('adminTabBtn').style.display='none';
   }
-  // show default tab Eintragung
   document.querySelectorAll('.tabBtn').forEach(b=>b.classList.remove('active'));
   document.querySelector('.tabBtn[data-tab="eintragung"]').classList.add('active');
   document.querySelectorAll('.tabContent').forEach(t=>t.style.display='none');
@@ -117,7 +117,6 @@ async function submitEntry(){
     const res = await apiPost(payload);
     if(res && res.ok){
       setMessage('entryMessage','Eintrag gespeichert', true);
-      // clear inputs
       document.getElementById('groupName').value='';
       document.getElementById('timeMin').value='0';
       document.getElementById('timeSec').value='0';
@@ -162,7 +161,7 @@ async function loadOverview(){
   try{
     const res = await apiGet(`action=getOverview`);
     if(res && res.ok){
-      const data = res.data || {}; // { room: [entries...] }
+      const data = res.data || {};
       wrap.innerHTML = '';
       ROOMS.forEach(room=>{
         const arr = (data[room] || []).slice(0,10);
@@ -188,6 +187,45 @@ function renderTinyTable(rows){
   html += '</tbody></table>';
   return html;
 }
+
+// --- Suche ---
+async function doSearch(){
+  const q = document.getElementById('searchGroupInput').value.trim();
+  const wrap = document.getElementById('searchResultsWrap');
+  const msg = document.getElementById('searchMessage');
+  wrap.innerHTML = '';
+  msg.textContent = '';
+  if(!q){ msg.textContent = 'Bitte Gruppenname eingeben'; return; }
+  msg.textContent = 'Suche...';
+  try{
+    const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}`);
+    if(res && res.ok){
+      const data = res.data || [];
+      if(!data.length){
+        wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
+      } else {
+        wrap.innerHTML = renderSearchResultsTable(data);
+      }
+      msg.textContent = '';
+    } else {
+      msg.textContent = (res && res.message) ? res.message : 'Fehler bei der Suche';
+    }
+  }catch(err){
+    console.error('doSearch error', err);
+    msg.textContent = 'Fehler bei der Suche';
+  }
+}
+
+// data: array of {room, rank, groupName, timeSeconds, timeDisplay}
+function renderSearchResultsTable(data){
+  let html = `<table><thead><tr><th>Raum</th><th>Platz</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+  data.forEach(d=>{
+    html += `<tr><td>${escapeHtml(d.room)}</td><td>${d.rank}</td><td>${escapeHtml(d.groupName)}</td><td>${formatTime(d.timeSeconds)}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+  return html;
+}
+// --- Ende Suche ---
 
 async function generateAdminImage(){
   if(session.role !== 'admin'){ alert('Nur Admins dürfen das ausführen'); return; }
@@ -256,20 +294,17 @@ async function generateAdminImage(){
   }
 }
 
-// helper: format time seconds -> mm:ss
 function formatTime(totalSec){
   const m = Math.floor(totalSec/60);
   const s = totalSec % 60;
   return `${m}m ${String(s).padStart(2,'0')}s`;
 }
 
-// helper: escape html
 function escapeHtml(s){
   if(!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// small UI helper
 function setMessage(id, text, ok=false){
   const el = document.getElementById(id);
   el.textContent = text;
@@ -277,8 +312,7 @@ function setMessage(id, text, ok=false){
   setTimeout(()=>{ if(el.textContent===text) el.textContent=''; }, 5000);
 }
 
-// API helpers
-
+// API helpers (GET/POST unchanged)
 async function apiGet(query){
   const url = `${API_URL}?${query}`;
   const resp = await fetch(url, {method:'GET', headers:{'Accept':'application/json'}});
@@ -290,22 +324,16 @@ async function apiGet(query){
   }
 }
 
-// NEU: apiPost ohne explizite custom headers (vermeidet CORS preflight)
-// Wichtig: Wir übergeben URLSearchParams als body, der Browser setzt dann automatisch
-// Content-Type: application/x-www-form-urlencoded;charset=UTF-8 (safelisted)
 async function apiPost(obj){
   const params = new URLSearchParams();
   for(const k in obj){
     if(obj[k] === undefined || obj[k] === null) continue;
     params.append(k, String(obj[k]));
   }
-
-  // WICHTIG: keine custom headers setzen, um Preflight zu vermeiden.
   const resp = await fetch(API_URL, {
     method:'POST',
     body: params
   });
-
   const text = await resp.text();
   try{
     return JSON.parse(text);
