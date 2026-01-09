@@ -1,4 +1,4 @@
-// app.js - vollständiges Frontend-Skript (inkl. neuer Suche-Logik)
+// app.js - vollständiges Frontend-Skript (inkl. verbesserter Suche)
 // Erwartet: API_URL und ROOMS in config.js
 
 let session = {
@@ -45,7 +45,6 @@ function onTabClick(e){
   } else if(tab==='uebersicht'){
     loadOverview();
   } else if(tab==='suche'){
-    // clear previous
     document.getElementById('searchMessage').textContent='';
     document.getElementById('searchResultsWrap').innerHTML='';
   }
@@ -188,7 +187,7 @@ function renderTinyTable(rows){
   return html;
 }
 
-// --- Suche ---
+// --- Suche (partial/exact + gruppierte Darstellung) ---
 async function doSearch(){
   const q = document.getElementById('searchGroupInput').value.trim();
   const wrap = document.getElementById('searchResultsWrap');
@@ -197,14 +196,17 @@ async function doSearch(){
   msg.textContent = '';
   if(!q){ msg.textContent = 'Bitte Gruppenname eingeben'; return; }
   msg.textContent = 'Suche...';
+  const partial = document.getElementById('searchPartial').checked ? 'true' : 'false';
   try{
-    const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}`);
+    const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}&partial=${partial}&n=200`);
     if(res && res.ok){
-      const data = res.data || [];
-      if(!data.length){
+      const data = res.data || {};
+      // data is an object mapping room => [matches]
+      const roomsWithMatches = Object.keys(data).filter(r => data[r] && data[r].length);
+      if(!roomsWithMatches.length){
         wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
       } else {
-        wrap.innerHTML = renderSearchResultsTable(data);
+        wrap.innerHTML = renderSearchGroupedResults(data, q);
       }
       msg.textContent = '';
     } else {
@@ -216,13 +218,19 @@ async function doSearch(){
   }
 }
 
-// data: array of {room, rank, groupName, timeSeconds, timeDisplay}
-function renderSearchResultsTable(data){
-  let html = `<table><thead><tr><th>Raum</th><th>Platz</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
-  data.forEach(d=>{
-    html += `<tr><td>${escapeHtml(d.room)}</td><td>${d.rank}</td><td>${escapeHtml(d.groupName)}</td><td>${formatTime(d.timeSeconds)}</td></tr>`;
+function renderSearchGroupedResults(data, query){
+  // data: { roomName: [ {rank, groupName, timeSeconds, timeDisplay}, ... ] }
+  let html = '';
+  ROOMS.forEach(room=>{
+    const arr = data[room] || [];
+    if(!arr || !arr.length) return;
+    html += `<div class="roomBlock" style="margin-bottom:12px"><h3>${escapeHtml(room)}</h3>`;
+    html += `<table><thead><tr><th>Platz</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+    arr.forEach(item=>{
+      html += `<tr><td>${item.rank}</td><td>${escapeHtml(item.groupName)}</td><td>${formatTime(item.timeSeconds)}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
   });
-  html += `</tbody></table>`;
   return html;
 }
 // --- Ende Suche ---
@@ -312,7 +320,7 @@ function setMessage(id, text, ok=false){
   setTimeout(()=>{ if(el.textContent===text) el.textContent=''; }, 5000);
 }
 
-// API helpers (GET/POST unchanged)
+// API helpers
 async function apiGet(query){
   const url = `${API_URL}?${query}`;
   const resp = await fetch(url, {method:'GET', headers:{'Accept':'application/json'}});
