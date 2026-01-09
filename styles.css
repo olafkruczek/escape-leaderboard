@@ -1,0 +1,50 @@
+:root{
+  --accent:#2b7cff;
+  --muted:#666;
+  --card-bg:#fff;
+  --bg:#f6f8fb;
+}
+*{box-sizing:border-box}
+body{
+  font-family:system-ui,Segoe UI,Roboto,Arial;
+  background:var(--bg);
+  color:#222;
+  margin:0;
+  padding:20px;
+}
+header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:16px;
+}
+h1{margin:0 0 8px 0}
+.card{
+  background:var(--card-bg);
+  border-radius:8px;
+  padding:16px;
+  box-shadow:0 1px 4px rgba(0,0,0,0.08);
+  max-width:720px;
+  margin-bottom:16px;
+}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tabBtn{
+  padding:8px 12px;border-radius:6px;border:1px solid rgba(0,0,0,0.06);
+  background:#fff;cursor:pointer;
+}
+.tabBtn.active{background:var(--accent);color:#fff}
+label{display:block;margin-bottom:8px}
+input, select{display:block;padding:8px;margin-top:4px;width:100%;max-width:360px}
+.row{margin-top:8px}
+.timeRow{display:flex;gap:8px;align-items:center}
+.timeRow input{width:120px}
+.message{margin-top:8px;color:var(--muted)}
+#boardTableWrap table, #overviewWrap table {border-collapse:collapse;width:100%;max-width:720px}
+#boardTableWrap th, #boardTableWrap td, #overviewWrap th, #overviewWrap td{
+  border:1px solid #ddd;padding:6px;text-align:left
+}
+#overviewWrap .roomBlock{display:inline-block;vertical-align:top;margin:8px;padding:8px;background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+footer{margin-top:24px;color:var(--muted)}
+@media(min-width:900px){
+  #overviewWrap .roomBlock{width:45%}
+}

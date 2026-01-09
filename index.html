@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Escape Room Leaderboard</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- html2canvas for export to JPEG -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Escape Room Leaderboard</h1>
+      <div id="userInfo">
+        <span id="welcomeText"></span>
+        <button id="logoutBtn" style="display:none">Logout</button>
+      </div>
+    </header>
+
+    <!-- Login Area (modal-like) -->
+    <div id="loginArea" class="card">
+      <h2>Login</h2>
+      <label>Benutzername<input id="loginUser" /></label>
+      <label>Passwort<input id="loginPass" type="password" /></label>
+      <div class="row">
+        <button id="loginBtn">Login</button>
+      </div>
+      <div id="loginMessage" class="message"></div>
+    </div>
+
+    <!-- Main content (hidden until login) -->
+    <div id="mainContent" style="display:none">
+      <nav class="tabs">
+        <button class="tabBtn active" data-tab="eintragung">Eintragung</button>
+        <button class="tabBtn" data-tab="leaderboard">Leaderboard</button>
+        <button class="tabBtn" data-tab="uebersicht">Übersicht</button>
+        <button class="tabBtn" data-tab="adminbereich" id="adminTabBtn" style="display:none">Adminbereich</button>
+      </nav>
+
+      <section id="eintragung" class="tabContent">
+        <h2>Eintragung</h2>
+        <label>Gruppenname<input id="groupName" /></label>
+        <label>Escape Room
+          <select id="roomSelectEntry"></select>
+        </label>
+        <div class="timeRow">
+          <label>Minuten<input id="timeMin" type="number" min="0" value="0" /></label>
+          <label>Sekunden<input id="timeSec" type="number" min="0" max="59" value="0" /></label>
+        </div>
+        <div class="row">
+          <button id="submitEntryBtn">Eintragen</button>
+        </div>
+        <div id="entryMessage" class="message"></div>
+      </section>
+
+      <section id="leaderboard" class="tabContent" style="display:none">
+        <h2>Leaderboard</h2>
+        <label>Escape Room
+          <select id="roomSelectBoard"></select>
+        </label>
+        <button id="refreshBoardBtn">Aktualisieren</button>
+        <div id="boardTableWrap"></div>
+      </section>
+
+      <section id="uebersicht" class="tabContent" style="display:none">
+        <h2>Übersicht (Top 10 je Raum)</h2>
+        <div id="overviewWrap"></div>
+      </section>
+
+      <section id="adminbereich" class="tabContent" style="display:none">
+        <h2>Adminbereich</h2>
+        <p>Erzeuge JPEG der Übersicht (3-zeiliges Layout, siehe Spezifikation)</p>
+        <button id="generateImageBtn">JPEG erzeugen und herunterladen</button>
+        <div id="exportArea" style="margin-top:20px; display:none"></div>
+      </section>
+    </div>
+
+    <footer>
+      <small>Interne Nutzung. Entwickelt für GitHub Pages + Google Sheets (Apps Script).</small>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
