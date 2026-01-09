@@ -1,6 +1,4 @@
-// Haupt-Frontend-Logik
-// Erwartet API_URL in config.js
-
+// Haupt-Frontend-Logik (aktualisierte apiPost: sendet application/x-www-form-urlencoded)
 let session = {
   token: localStorage.getItem('er_token') || null,
   user: localStorage.getItem('er_user') || null,
@@ -192,15 +190,10 @@ function renderTinyTable(rows){
 
 async function generateAdminImage(){
   if(session.role !== 'admin'){ alert('Nur Admins dürfen das ausführen'); return; }
-  // Build exportArea DOM as specified:
-  // 1st row: side-by-side the 5 best placements of "The Saw Massacre" and "Nightmare Hotel"
-  // 2nd row: 5 best of "Der Heilige Gral"
-  // 3rd row: side-by-side 5 best of "Der Erbe Draculas" and "666 Passagiere"
   const exportArea = document.getElementById('exportArea');
   exportArea.style.display='block';
-  exportArea.innerHTML = ''; // compose
+  exportArea.innerHTML = '';
   try{
-    // fetch top 5 for each needed room
     const needed = [
       "The Saw Massacre","Nightmare Hotel",
       "Der Heilige Gral",
@@ -215,7 +208,6 @@ async function generateAdminImage(){
       else data[r] = [];
     }
 
-    // Helper to create table HTML
     function makeBlockHTML(roomName, arr){
       let html = `<div class="exportBlock"><h4>${escapeHtml(roomName)}</h4>`;
       html += `<table><thead><tr><th>#</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
@@ -228,33 +220,27 @@ async function generateAdminImage(){
       return html;
     }
 
-    // Row 1: two blocks side-by-side
     const row1 = document.createElement('div');
     row1.style.display='flex'; row1.style.gap='12px';
     row1.innerHTML = makeBlockHTML("The Saw Massacre", data["The Saw Massacre"]) + makeBlockHTML("Nightmare Hotel", data["Nightmare Hotel"]);
     exportArea.appendChild(row1);
 
-    // Row 2: single wide block (centered)
     const row2 = document.createElement('div');
     row2.style.marginTop='12px';
     row2.innerHTML = makeBlockHTML("Der Heilige Gral", data["Der Heilige Gral"]);
     exportArea.appendChild(row2);
 
-    // Row 3: two blocks side-by-side
     const row3 = document.createElement('div');
     row3.style.display='flex'; row3.style.gap='12px'; row3.style.marginTop='12px';
     row3.innerHTML = makeBlockHTML("Der Erbe Draculas", data["Der Erbe Draculas"]) + makeBlockHTML("666 Passagiere", data["666 Passagiere"]);
     exportArea.appendChild(row3);
 
-    // add some styles for export blocks
     const style = document.createElement('style');
     style.innerHTML = `.exportBlock{background:#fff;padding:8px;border-radius:6px;width:100%} .exportBlock table{width:100%;border-collapse:collapse} .exportBlock th,.exportBlock td{border:1px solid #ccc;padding:4px}`;
     exportArea.appendChild(style);
 
-    // render to canvas via html2canvas
     const canvas = await html2canvas(exportArea, {scale:2, backgroundColor:'#f6f8fb'});
     const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    // create download link
     const a = document.createElement('a');
     a.href = dataUrl;
     a.download = 'uebersicht_leaderboard.jpg';
@@ -262,7 +248,6 @@ async function generateAdminImage(){
     a.style.display='inline-block';
     a.style.marginTop='10px';
     exportArea.appendChild(a);
-    // optional: auto-click
     a.click();
   }catch(err){
     console.error(err);
@@ -270,20 +255,17 @@ async function generateAdminImage(){
   }
 }
 
-// helper: format time seconds -> mm:ss
 function formatTime(totalSec){
   const m = Math.floor(totalSec/60);
   const s = totalSec % 60;
   return `${m}m ${String(s).padStart(2,'0')}s`;
 }
 
-// helper: escape html
 function escapeHtml(s){
   if(!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-// small UI helper
 function setMessage(id, text, ok=false){
   const el = document.getElementById(id);
   el.textContent = text;
@@ -298,11 +280,18 @@ async function apiGet(query){
   const data = await resp.json();
   return data;
 }
+
+// NEU: apiPost sendet application/x-www-form-urlencoded (vermeidet CORS preflight)
 async function apiPost(obj){
+  const params = new URLSearchParams();
+  for(const k in obj){
+    if(obj[k] === undefined || obj[k] === null) continue;
+    params.append(k, String(obj[k]));
+  }
   const resp = await fetch(API_URL, {
     method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(obj)
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body: params.toString()
   });
   const data = await resp.json();
   return data;
