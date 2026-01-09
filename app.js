@@ -1,5 +1,4 @@
-// app.js - vollständiges Frontend-Skript (aktualisiert, inkl. Suche mit Teilübereinstimmung,
-// CORS-sicherer apiPost via URLSearchParams, "Platzierung" Tabellenüberschriften)
+// app.js - vollständiges Frontend-Skript (Suchergebnisse als kombinierte Tabelle)
 // Erwartet: API_URL und ROOMS in config.js
 
 let session = {
@@ -158,7 +157,7 @@ async function loadLeaderboard(room){
 }
 
 function renderLeaderboardTable(rows, room){
-  if(!rows || !rows.length) return `<div class="message">Keine Einträge f��r "${escapeHtml(room)}".</div>`;
+  if(!rows || !rows.length) return `<div class="message">Keine Einträge für "${escapeHtml(room)}".</div>`;
   let html = `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
   rows.sort((a,b)=>a.timeSeconds - b.timeSeconds);
   rows.forEach((r,i)=>{
@@ -201,7 +200,7 @@ function renderTinyTable(rows){
   return html;
 }
 
-// ----------------- Suche (partial/exact + gruppierte Darstellung) -----------------
+// ----------------- Suche (partial/exact) -----------------
 async function doSearch(){
   const q = document.getElementById('searchGroupInput').value.trim();
   const wrap = document.getElementById('searchResultsWrap');
@@ -215,11 +214,29 @@ async function doSearch(){
     const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}&partial=${partial}&n=200`);
     if(res && res.ok){
       const data = res.data || {};
-      const roomsWithMatches = Object.keys(data).filter(r => data[r] && data[r].length);
-      if(!roomsWithMatches.length){
+      // flatten results into single array
+      const flat = [];
+      ROOMS.forEach(room=>{
+        const arr = data[room] || [];
+        arr.forEach(item=>{
+          flat.push({
+            room: room,
+            rank: item.rank,
+            groupName: item.groupName,
+            timeSeconds: Number(item.timeSeconds || 0)
+          });
+        });
+      });
+      if(!flat.length){
         wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
       } else {
-        wrap.innerHTML = renderSearchGroupedResults(data);
+        // sort by room then rank
+        flat.sort((a,b)=>{
+          if(a.room < b.room) return -1;
+          if(a.room > b.room) return 1;
+          return a.rank - b.rank;
+        });
+        wrap.innerHTML = renderSearchResultsTable(flat);
       }
       msg.textContent = '';
     } else {
@@ -231,19 +248,13 @@ async function doSearch(){
   }
 }
 
-function renderSearchGroupedResults(data){
-  // data: { roomName: [ {rank, groupName, timeSeconds, timeDisplay}, ... ] }
-  let html = '';
-  ROOMS.forEach(room=>{
-    const arr = data[room] || [];
-    if(!arr || !arr.length) return;
-    html += `<div class="roomBlock" style="margin-bottom:12px"><h3>${escapeHtml(room)}</h3>`;
-    html += `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
-    arr.forEach(item=>{
-      html += `<tr><td>${item.rank}</td><td>${escapeHtml(item.groupName)}</td><td>${formatTime(item.timeSeconds)}</td></tr>`;
-    });
-    html += `</tbody></table></div>`;
+// Renders a single combined table for all matches
+function renderSearchResultsTable(rows){
+  let html = `<table><thead><tr><th>Raum</th><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+  rows.forEach(r=>{
+    html += `<tr><td>${escapeHtml(r.room)}</td><td>${r.rank}</td><td>${escapeHtml(r.groupName)}</td><td>${formatTime(r.timeSeconds)}</td></tr>`;
   });
+  html += `</tbody></table>`;
   return html;
 }
 
@@ -354,7 +365,7 @@ async function apiPost(obj){
   }
   const resp = await fetch(API_URL, {
     method: 'POST',
-    body: params // Browser setzt automatisch Content-Type: application/x-www-form-urlencoded;charset=UTF-8
+    body: params // Browser sets Content-Type automatically
   });
   const text = await resp.text();
   try{
