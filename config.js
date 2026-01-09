@@ -1,7 +1,7 @@
 // ---- Konfiguration ----
 // Trage hier die URL deiner deployten Google Apps Script Web-App ein.
 // Beispiel: "https://script.google.com/macros/s/AKfy.../exec"
-const API_URL = "https://script.google.com/macros/s/AKfycbyKNtUUicIAeZC8cZ7aJPk42F57wxiublf59G1a9Td1XUWbQXTqfNPLvWapKZDWs7tj/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycby8X-cuSjM5hiPXFzmfTtZ7HyglrM7kiPDY83QkmhT-QygnNCkCxcmFMx2s3ErsZbwQ/exec";
 
 // Escape Rooms (statisch, wie von dir gewünscht)
 const ROOMS = [
