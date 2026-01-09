@@ -1,4 +1,6 @@
-// Haupt-Frontend-Logik (aktualisierte apiPost: sendet application/x-www-form-urlencoded)
+// app.js - vollständiges Frontend-Skript (aktualisiert: apiPost vermeidet CORS-Preflight)
+// Erwartet: API_URL und ROOMS aus config.js
+
 let session = {
   token: localStorage.getItem('er_token') || null,
   user: localStorage.getItem('er_user') || null,
@@ -53,7 +55,7 @@ async function doLogin(){
   if(!user || !pass){ setMessage('loginMessage','Bitte Benutzername und Passwort eingeben'); return; }
   try{
     const res = await apiPost({action:'login', username:user, password:pass});
-    if(res.ok && res.role){
+    if(res && res.ok && res.role){
       session.token = res.token;
       session.user = user;
       session.role = res.role;
@@ -62,10 +64,10 @@ async function doLogin(){
       localStorage.setItem('er_role', res.role);
       showMainForSession();
     } else {
-      setMessage('loginMessage', res.message || 'Login fehlgeschlagen');
+      setMessage('loginMessage', (res && res.message) ? res.message : 'Login fehlgeschlagen');
     }
   }catch(err){
-    console.error(err); setMessage('loginMessage','Fehler beim Login');
+    console.error('doLogin error', err); setMessage('loginMessage','Fehler beim Login');
   }
 }
 
@@ -113,17 +115,17 @@ async function submitEntry(){
       timeSeconds: totalSec
     };
     const res = await apiPost(payload);
-    if(res.ok){
+    if(res && res.ok){
       setMessage('entryMessage','Eintrag gespeichert', true);
       // clear inputs
       document.getElementById('groupName').value='';
       document.getElementById('timeMin').value='0';
       document.getElementById('timeSec').value='0';
     } else {
-      setMessage('entryMessage', res.message || 'Fehler beim Speichern');
+      setMessage('entryMessage', (res && res.message) ? res.message : 'Fehler beim Speichern');
     }
   }catch(err){
-    console.error(err); setMessage('entryMessage','Fehler beim Senden');
+    console.error('submitEntry error', err); setMessage('entryMessage','Fehler beim Senden');
   }
 }
 
@@ -132,14 +134,14 @@ async function loadLeaderboard(room){
   wrap.innerHTML = 'Lade...';
   try{
     const res = await apiGet(`action=getLeaderboard&room=${encodeURIComponent(room)}`);
-    if(res.ok){
+    if(res && res.ok){
       const rows = res.data || [];
       wrap.innerHTML = renderLeaderboardTable(rows, room);
     } else {
-      wrap.innerHTML = `<div class="message">Fehler: ${res.message || 'k.A.'}</div>`;
+      wrap.innerHTML = `<div class="message">Fehler: ${(res && res.message) ? res.message : 'k.A.'}</div>`;
     }
   }catch(err){
-    console.error(err); wrap.innerHTML = '<div class="message">Fehler beim Laden</div>';
+    console.error('loadLeaderboard error', err); wrap.innerHTML = '<div class="message">Fehler beim Laden</div>';
   }
 }
 
@@ -159,9 +161,8 @@ async function loadOverview(){
   wrap.innerHTML = 'Lade...';
   try{
     const res = await apiGet(`action=getOverview`);
-    if(res.ok){
+    if(res && res.ok){
       const data = res.data || {}; // { room: [entries...] }
-      // Render each room with top 10
       wrap.innerHTML = '';
       ROOMS.forEach(room=>{
         const arr = (data[room] || []).slice(0,10);
@@ -171,10 +172,10 @@ async function loadOverview(){
         wrap.appendChild(block);
       });
     } else {
-      wrap.innerHTML = `<div class="message">Fehler: ${res.message || 'k.A.'}</div>`;
+      wrap.innerHTML = `<div class="message">Fehler: ${(res && res.message) ? res.message : 'k.A.'}</div>`;
     }
   }catch(err){
-    console.error(err); wrap.innerHTML = '<div class="message">Fehler beim Laden</div>';
+    console.error('loadOverview error', err); wrap.innerHTML = '<div class="message">Fehler beim Laden</div>';
   }
 }
 
@@ -204,7 +205,7 @@ async function generateAdminImage(){
     const data = {};
     for(let i=0;i<needed.length;i++){
       const r = needed[i];
-      if(results[i].ok) data[r] = results[i].data || [];
+      if(results[i] && results[i].ok) data[r] = results[i].data || [];
       else data[r] = [];
     }
 
@@ -250,22 +251,25 @@ async function generateAdminImage(){
     exportArea.appendChild(a);
     a.click();
   }catch(err){
-    console.error(err);
+    console.error('generateAdminImage error', err);
     alert('Fehler beim Erzeugen des Bildes');
   }
 }
 
+// helper: format time seconds -> mm:ss
 function formatTime(totalSec){
   const m = Math.floor(totalSec/60);
   const s = totalSec % 60;
   return `${m}m ${String(s).padStart(2,'0')}s`;
 }
 
+// helper: escape html
 function escapeHtml(s){
   if(!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// small UI helper
 function setMessage(id, text, ok=false){
   const el = document.getElementById(id);
   el.textContent = text;
@@ -274,25 +278,38 @@ function setMessage(id, text, ok=false){
 }
 
 // API helpers
+
 async function apiGet(query){
   const url = `${API_URL}?${query}`;
   const resp = await fetch(url, {method:'GET', headers:{'Accept':'application/json'}});
-  const data = await resp.json();
-  return data;
+  const text = await resp.text();
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    return { ok: false, message: 'Ungültige Serverantwort', raw: text };
+  }
 }
 
-// NEU: apiPost sendet application/x-www-form-urlencoded (vermeidet CORS preflight)
+// NEU: apiPost ohne explizite custom headers (vermeidet CORS preflight)
+// Wichtig: Wir übergeben URLSearchParams als body, der Browser setzt dann automatisch
+// Content-Type: application/x-www-form-urlencoded;charset=UTF-8 (safelisted)
 async function apiPost(obj){
   const params = new URLSearchParams();
   for(const k in obj){
     if(obj[k] === undefined || obj[k] === null) continue;
     params.append(k, String(obj[k]));
   }
+
+  // WICHTIG: keine custom headers setzen, um Preflight zu vermeiden.
   const resp = await fetch(API_URL, {
     method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body: params.toString()
+    body: params
   });
-  const data = await resp.json();
-  return data;
+
+  const text = await resp.text();
+  try{
+    return JSON.parse(text);
+  }catch(e){
+    return { ok: false, message: 'Ungültige Serverantwort', raw: text };
+  }
 }
