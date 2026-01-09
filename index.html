@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Escape Room Leaderboard</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- html2canvas for export to JPEG -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
@@ -18,7 +17,6 @@
       </div>
     </header>
 
-    <!-- Login Area (modal-like) -->
     <div id="loginArea" class="card">
       <h2>Login</h2>
       <label>Benutzername<input id="loginUser" /></label>
@@ -29,12 +27,12 @@
       <div id="loginMessage" class="message"></div>
     </div>
 
-    <!-- Main content (hidden until login) -->
     <div id="mainContent" style="display:none">
       <nav class="tabs">
         <button class="tabBtn active" data-tab="eintragung">Eintragung</button>
         <button class="tabBtn" data-tab="leaderboard">Leaderboard</button>
         <button class="tabBtn" data-tab="uebersicht">Übersicht</button>
+        <button class="tabBtn" data-tab="suche">Suche</button>
         <button class="tabBtn" data-tab="adminbereich" id="adminTabBtn" style="display:none">Adminbereich</button>
       </nav>
 
@@ -66,6 +64,14 @@
       <section id="uebersicht" class="tabContent" style="display:none">
         <h2>Übersicht (Top 10 je Raum)</h2>
         <div id="overviewWrap"></div>
+      </section>
+
+      <section id="suche" class="tabContent" style="display:none">
+        <h2>Suche</h2>
+        <label>Gruppenname<input id="searchGroupInput" placeholder="Gruppenname eingeben" /></label>
+        <div class="row"><button id="searchBtn">Suchen</button></div>
+        <div id="searchMessage" class="message"></div>
+        <div id="searchResultsWrap" style="margin-top:12px"></div>
       </section>
 
       <section id="adminbereich" class="tabContent" style="display:none">
