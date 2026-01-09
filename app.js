@@ -1,4 +1,5 @@
-// app.js - vollständiges Frontend-Skript (inkl. verbesserter Suche)
+// app.js - vollständiges Frontend-Skript (aktualisiert, inkl. Suche mit Teilübereinstimmung,
+// CORS-sicherer apiPost via URLSearchParams, "Platzierung" Tabellenüberschriften)
 // Erwartet: API_URL und ROOMS in config.js
 
 let session = {
@@ -10,6 +11,7 @@ let session = {
 document.addEventListener('DOMContentLoaded', init);
 
 function init(){
+  // Populate room dropdowns
   const selEntry = document.getElementById('roomSelectEntry');
   const selBoard = document.getElementById('roomSelectBoard');
   ROOMS.forEach(r=>{
@@ -17,15 +19,19 @@ function init(){
     const o2 = document.createElement('option'); o2.value = r; o2.textContent = r; selBoard.appendChild(o2);
   });
 
+  // Events
   document.getElementById('loginBtn').addEventListener('click', doLogin);
   document.getElementById('logoutBtn').addEventListener('click', doLogout);
   document.getElementById('submitEntryBtn').addEventListener('click', submitEntry);
   document.getElementById('refreshBoardBtn').addEventListener('click', () => loadLeaderboard(document.getElementById('roomSelectBoard').value));
   document.getElementById('generateImageBtn').addEventListener('click', generateAdminImage);
   document.querySelectorAll('.tabBtn').forEach(b=>b.addEventListener('click', onTabClick));
-  document.getElementById('searchBtn').addEventListener('click', doSearch);
-  document.getElementById('searchGroupInput').addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doSearch(); });
+  const searchBtn = document.getElementById('searchBtn');
+  if(searchBtn) searchBtn.addEventListener('click', doSearch);
+  const searchInput = document.getElementById('searchGroupInput');
+  if(searchInput) searchInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') doSearch(); });
 
+  // Initial UI
   if(session.token){
     showMainForSession();
   } else {
@@ -36,20 +42,23 @@ function init(){
 function onTabClick(e){
   document.querySelectorAll('.tabBtn').forEach(b=>b.classList.remove('active'));
   e.currentTarget.classList.add('active');
-  const tab= e.currentTarget.dataset.tab;
+  const tab = e.currentTarget.dataset.tab;
   document.querySelectorAll('.tabContent').forEach(t=>t.style.display='none');
-  document.getElementById(tab).style.display='block';
+  const el = document.getElementById(tab);
+  if(el) el.style.display='block';
 
-  if(tab==='leaderboard'){
+  // Load content when switching
+  if(tab === 'leaderboard'){
     loadLeaderboard(document.getElementById('roomSelectBoard').value);
-  } else if(tab==='uebersicht'){
+  } else if(tab === 'uebersicht'){
     loadOverview();
-  } else if(tab==='suche'){
-    document.getElementById('searchMessage').textContent='';
-    document.getElementById('searchResultsWrap').innerHTML='';
+  } else if(tab === 'suche'){
+    document.getElementById('searchMessage').textContent = '';
+    document.getElementById('searchResultsWrap').innerHTML = '';
   }
 }
 
+// ----------------- Auth -----------------
 async function doLogin(){
   const user = document.getElementById('loginUser').value.trim();
   const pass = document.getElementById('loginPass').value;
@@ -86,28 +95,32 @@ function showMainForSession(){
   document.getElementById('mainContent').style.display='block';
   document.getElementById('welcomeText').textContent = `Eingeloggt als ${session.user} (${session.role})`;
   document.getElementById('logoutBtn').style.display='inline-block';
-  if(session.role==='admin'){
+  // Admin tab visibility
+  if(session.role === 'admin'){
     document.getElementById('adminTabBtn').style.display='inline-block';
   } else {
     document.getElementById('adminTabBtn').style.display='none';
   }
+  // Show default tab Eintragung
   document.querySelectorAll('.tabBtn').forEach(b=>b.classList.remove('active'));
-  document.querySelector('.tabBtn[data-tab="eintragung"]').classList.add('active');
+  const defaultBtn = document.querySelector('.tabBtn[data-tab="eintragung"]');
+  if(defaultBtn) defaultBtn.classList.add('active');
   document.querySelectorAll('.tabContent').forEach(t=>t.style.display='none');
   document.getElementById('eintragung').style.display='block';
 }
 
+// ----------------- Eintragung -----------------
 async function submitEntry(){
   const group = document.getElementById('groupName').value.trim();
   const room = document.getElementById('roomSelectEntry').value;
   const min = parseInt(document.getElementById('timeMin').value,10) || 0;
   const sec = parseInt(document.getElementById('timeSec').value,10) || 0;
   if(!group){ setMessage('entryMessage','Bitte Gruppennamen eingeben'); return; }
-  if(sec<0 || sec>59){ setMessage('entryMessage','Sekunden müssen zwischen 0 und 59 liegen'); return; }
+  if(sec < 0 || sec > 59){ setMessage('entryMessage','Sekunden müssen zwischen 0 und 59 liegen'); return; }
   const totalSec = min*60 + sec;
   try{
     const payload = {
-      action:'addEntry',
+      action: 'addEntry',
       token: session.token,
       groupName: group,
       room: room,
@@ -127,6 +140,7 @@ async function submitEntry(){
   }
 }
 
+// ----------------- Leaderboard / Übersicht -----------------
 async function loadLeaderboard(room){
   const wrap = document.getElementById('boardTableWrap');
   wrap.innerHTML = 'Lade...';
@@ -144,8 +158,8 @@ async function loadLeaderboard(room){
 }
 
 function renderLeaderboardTable(rows, room){
-  if(!rows.length) return `<div class="message">Keine Einträge für "${room}".</div>`;
-  let html = `<table><thead><tr><th>Platz</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+  if(!rows || !rows.length) return `<div class="message">Keine Einträge f��r "${escapeHtml(room)}".</div>`;
+  let html = `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
   rows.sort((a,b)=>a.timeSeconds - b.timeSeconds);
   rows.forEach((r,i)=>{
     html += `<tr><td>${i+1}</td><td>${escapeHtml(r.groupName)}</td><td>${formatTime(r.timeSeconds)}</td></tr>`;
@@ -178,8 +192,8 @@ async function loadOverview(){
 }
 
 function renderTinyTable(rows){
-  if(!rows.length) return '<div class="message">Keine Einträge</div>';
-  let html = `<table><thead><tr><th>#</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+  if(!rows || !rows.length) return '<div class="message">Keine Einträge</div>';
+  let html = `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
   rows.forEach((r,i)=>{
     html += `<tr><td>${i+1}</td><td>${escapeHtml(r.groupName)}</td><td>${formatTime(r.timeSeconds)}</td></tr>`;
   });
@@ -187,7 +201,7 @@ function renderTinyTable(rows){
   return html;
 }
 
-// --- Suche (partial/exact + gruppierte Darstellung) ---
+// ----------------- Suche (partial/exact + gruppierte Darstellung) -----------------
 async function doSearch(){
   const q = document.getElementById('searchGroupInput').value.trim();
   const wrap = document.getElementById('searchResultsWrap');
@@ -196,17 +210,16 @@ async function doSearch(){
   msg.textContent = '';
   if(!q){ msg.textContent = 'Bitte Gruppenname eingeben'; return; }
   msg.textContent = 'Suche...';
-  const partial = document.getElementById('searchPartial').checked ? 'true' : 'false';
+  const partial = document.getElementById('searchPartial') && document.getElementById('searchPartial').checked ? 'true' : 'false';
   try{
     const res = await apiGet(`action=searchGroup&group=${encodeURIComponent(q)}&partial=${partial}&n=200`);
     if(res && res.ok){
       const data = res.data || {};
-      // data is an object mapping room => [matches]
       const roomsWithMatches = Object.keys(data).filter(r => data[r] && data[r].length);
       if(!roomsWithMatches.length){
         wrap.innerHTML = `<div class="message">Keine Treffer für "${escapeHtml(q)}"</div>`;
       } else {
-        wrap.innerHTML = renderSearchGroupedResults(data, q);
+        wrap.innerHTML = renderSearchGroupedResults(data);
       }
       msg.textContent = '';
     } else {
@@ -218,14 +231,14 @@ async function doSearch(){
   }
 }
 
-function renderSearchGroupedResults(data, query){
+function renderSearchGroupedResults(data){
   // data: { roomName: [ {rank, groupName, timeSeconds, timeDisplay}, ... ] }
   let html = '';
   ROOMS.forEach(room=>{
     const arr = data[room] || [];
     if(!arr || !arr.length) return;
     html += `<div class="roomBlock" style="margin-bottom:12px"><h3>${escapeHtml(room)}</h3>`;
-    html += `<table><thead><tr><th>Platz</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+    html += `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
     arr.forEach(item=>{
       html += `<tr><td>${item.rank}</td><td>${escapeHtml(item.groupName)}</td><td>${formatTime(item.timeSeconds)}</td></tr>`;
     });
@@ -233,12 +246,12 @@ function renderSearchGroupedResults(data, query){
   });
   return html;
 }
-// --- Ende Suche ---
 
+// ----------------- Admin: Export JPEG -----------------
 async function generateAdminImage(){
   if(session.role !== 'admin'){ alert('Nur Admins dürfen das ausführen'); return; }
   const exportArea = document.getElementById('exportArea');
-  exportArea.style.display='block';
+  exportArea.style.display = 'block';
   exportArea.innerHTML = '';
   try{
     const needed = [
@@ -257,7 +270,7 @@ async function generateAdminImage(){
 
     function makeBlockHTML(roomName, arr){
       let html = `<div class="exportBlock"><h4>${escapeHtml(roomName)}</h4>`;
-      html += `<table><thead><tr><th>#</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
+      html += `<table><thead><tr><th>Platzierung</th><th>Gruppe</th><th>Zeit</th></tr></thead><tbody>`;
       for(let i=0;i<5;i++){
         const row = arr[i];
         if(row) html += `<tr><td>${i+1}</td><td>${escapeHtml(row.groupName)}</td><td>${formatTime(row.timeSeconds)}</td></tr>`;
@@ -267,18 +280,15 @@ async function generateAdminImage(){
       return html;
     }
 
-    const row1 = document.createElement('div');
-    row1.style.display='flex'; row1.style.gap='12px';
+    const row1 = document.createElement('div'); row1.style.display='flex'; row1.style.gap='12px';
     row1.innerHTML = makeBlockHTML("The Saw Massacre", data["The Saw Massacre"]) + makeBlockHTML("Nightmare Hotel", data["Nightmare Hotel"]);
     exportArea.appendChild(row1);
 
-    const row2 = document.createElement('div');
-    row2.style.marginTop='12px';
+    const row2 = document.createElement('div'); row2.style.marginTop='12px';
     row2.innerHTML = makeBlockHTML("Der Heilige Gral", data["Der Heilige Gral"]);
     exportArea.appendChild(row2);
 
-    const row3 = document.createElement('div');
-    row3.style.display='flex'; row3.style.gap='12px'; row3.style.marginTop='12px';
+    const row3 = document.createElement('div'); row3.style.display='flex'; row3.style.gap='12px'; row3.style.marginTop='12px';
     row3.innerHTML = makeBlockHTML("Der Erbe Draculas", data["Der Erbe Draculas"]) + makeBlockHTML("666 Passagiere", data["666 Passagiere"]);
     exportArea.appendChild(row3);
 
@@ -302,6 +312,7 @@ async function generateAdminImage(){
   }
 }
 
+// ----------------- Helpers -----------------
 function formatTime(totalSec){
   const m = Math.floor(totalSec/60);
   const s = totalSec % 60;
@@ -315,12 +326,14 @@ function escapeHtml(s){
 
 function setMessage(id, text, ok=false){
   const el = document.getElementById(id);
+  if(!el) return;
   el.textContent = text;
   el.style.color = ok ? 'green' : '';
-  setTimeout(()=>{ if(el.textContent===text) el.textContent=''; }, 5000);
+  setTimeout(()=>{ if(el && el.textContent === text) el.textContent = ''; }, 5000);
 }
 
-// API helpers
+// ----------------- API helpers -----------------
+// GET helper
 async function apiGet(query){
   const url = `${API_URL}?${query}`;
   const resp = await fetch(url, {method:'GET', headers:{'Accept':'application/json'}});
@@ -332,6 +345,7 @@ async function apiGet(query){
   }
 }
 
+// POST helper (CORS-safe: send URLSearchParams, no custom headers)
 async function apiPost(obj){
   const params = new URLSearchParams();
   for(const k in obj){
@@ -339,8 +353,8 @@ async function apiPost(obj){
     params.append(k, String(obj[k]));
   }
   const resp = await fetch(API_URL, {
-    method:'POST',
-    body: params
+    method: 'POST',
+    body: params // Browser setzt automatisch Content-Type: application/x-www-form-urlencoded;charset=UTF-8
   });
   const text = await resp.text();
   try{
